@@ -28,19 +28,38 @@ output:
 
 </style>                    
 
-```{r, echo = FALSE}
+```{r setup, include = FALSE}
 library(tidyverse)
 library(flexdashboard)
 library(leaflet)
 library(tibble)
 library(sf)
 library(DT)
+library(metathis)
 setwd("/Users/steven/Documents/elections/ontario/")
 load("saved_with_sigma.Rdata")
-district_region_list <- district_regions %>% select(districtid, regionid) %>% arrange(districtid)
+district_region_list <- district_regions %>% select(districtid, regionid, region, district) %>% arrange(districtid)
 region_list <- district_regions %>% select(regionid, region) %>% distinct() %>% arrange(regionid)
 party_list_wide <- party_list %>% pivot_wider(names_from = party, values_from = partyid)
 boundaries <- st_read("./shapefiles/ELECTORAL_DISTRICT.shp", quiet = TRUE)
+
+meta() %>%
+  meta_tag(
+  "http-equiv" = "Pragma-directive",
+  content = "no-cache") %>%
+  meta_tag(
+  "http-equiv" = "Cache-directive",
+  content = "no-cache") %>%
+    meta_tag(
+  "http-equiv" = "Cache-control",
+  content = "no-cache") %>%
+    meta_tag(
+  "http-equiv" = "Pragma",
+  content = "no-cache") %>%
+    meta_tag(
+  "http-equiv" = "Expires",
+  content = "0")
+
 ```
 # Overview
 
@@ -232,12 +251,16 @@ ggpubr::ggarrange(pc_majority + ggtitle("Likelihood of PC majority", subtitle = 
 ```{r}
 (riding_win_percentages %>% rownames_to_column(var = "Party") %>% pivot_longer(!Party, names_to = "district") %>% pivot_wider(names_from = Party) %>%
   rename(PC_win = "1",NDP_win = "2",Liberal_win = "3",Green_win = "4",Other_win = "5")) %>%
+  inner_join(district_region_list, on="district") %>%
+  select(-c(regionid,districtid)) %>%
+  relocate(region, .after = district) %>%
   datatable(caption = htmltools::tags$caption(
             style = 'caption-side: top; text-align: left;',
             'Probability to win each riding:', htmltools::em('Full details for each riding available through the navigation menu.')
             ),
             options = list(pageLength = 20),
-            colnames = c("Riding", "PC", "NDP", "Liberal", "Green", "Other")) %>%
+            rownames = FALSE,
+            colnames = c("Riding", "Region", "PC", "NDP", "Liberal", "Green", "Other")) %>%
   formatPercentage(c("PC_win", "NDP_win", "Liberal_win", "Green_win", "Other_win"), 1)
 ```
 

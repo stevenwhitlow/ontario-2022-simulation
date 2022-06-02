@@ -20,6 +20,11 @@ omega <- summary(campaign_fit, par = "omega") %>%
   as.data.frame() %>%
   rownames_to_column("parameter") 
 
+omega_matrix <- matrix(0, nrow = 5, ncol = 5)
+for (row in 1:dim(omega_matrix)[1]){
+  omega_matrix[row,] <- omega %>% select(summary.mean) %>% .[(1+(row*5)-5):(5+(row*5)-5),]
+}
+  
 results_2018_df <- results_2018 %>%
   as.data.frame() %>%
   pivot_longer(!c(Date, N), names_to = "party", values_to = "actual_vote")
@@ -49,19 +54,19 @@ delta <- delta %>%
   tally(name = "num_polls_by_firm") %>%
   ungroup(), by = "Firm")
 
-#sigma <- summary(campaign_fit, par = "sigma") %>%
-#  as.data.frame() %>%
-#  rownames_to_column("parameter") %>%
-#  mutate(firmid = as.numeric(str_extract(parameter, "(?<=\\[)\\d+"))) %>%
-#  inner_join(firm_list, by = "firmid")
+sigma <- summary(campaign_fit, par = "sigma") %>%
+  as.data.frame() %>%
+  rownames_to_column("parameter") %>%
+  mutate(firmid = as.numeric(str_extract(parameter, "(?<=\\[)\\d+"))) %>%
+  inner_join(firm_list, by = "firmid")
 
-#sigma %>% select(summary.mean, Firm) %>% arrange(desc(summary.mean))
+sigma %>% select(summary.mean, Firm) %>% arrange(desc(summary.mean))
 
-#sigma %>% select(summary.mean, Firm) %>% 
-#  inner_join(delta %>% select(Firm, num_polls_by_firm), by = ("Firm")) %>%
-#  select(summary.mean, Firm, num_polls_by_firm) %>%
-#  distinct() %>%
-#  summarise(weighted.mean(summary.mean, num_polls_by_firm))
+sigma %>% select(summary.mean, Firm) %>%
+  inner_join(delta %>% select(Firm, num_polls_by_firm), by = ("Firm")) %>%
+  select(summary.mean, Firm, num_polls_by_firm) %>%
+  distinct() %>%
+  summarise(weighted.mean(summary.mean, num_polls_by_firm))
 
 delta %>% filter(num_polls_by_firm >= 5) %>% View()
 

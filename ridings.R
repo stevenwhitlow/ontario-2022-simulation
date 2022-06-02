@@ -210,7 +210,7 @@ start <- Sys.time()
 riding_simulations <- simulate_riding_swing(region_simulations,
                                             region_results_2018 %>% select(-c(region, votes_region)),
                                             riding_results_2018_wide %>% select(PC, NDP, Liberal, Green, Other),
-                                            100,
+                                            200,
                                             riding_results_2018_wide %>% pull(district),
                                             riding_results_2018_wide %>% select(regionid),
                                             omega_matrix)
@@ -294,7 +294,7 @@ reweighted_simulations <- get_reweighted_percentages(riding_simulations, riding_
 
 simulations %>% as.data.frame() %>% summarise_all(mean)
 
-vote_simulation_detailed <- ggplot(simulations) +
+vote_simulation_detailed <- ggplot(reweighted_simulations) +
   geom_histogram(aes(x=PC), color = "Black", fill = "dodgerblue4", alpha=0.5, binwidth = 0.0025) +
   geom_histogram(aes(x=Liberal), color = "Black", fill = "Red4",alpha=0.5, binwidth = 0.0025) +
   geom_histogram(aes(x=NDP), color = "Black", fill = "darkorange2",alpha=0.5, binwidth = 0.0025) +
@@ -345,7 +345,15 @@ seat_simulation_detailed <- riding_winners %>%
 ggsave("./figures/seat_simulations_detailed.png")
 
 
-percentiles_votes <- simulations %>%
+mean_seats_simulations <- riding_winners %>%
+  select(PC_seats, NDP_seats, Liberal_seats, Green_seats, Other_seats) %>%
+  summarise_all(mean) %>%
+  pivot_longer(cols = everything(),
+               names_to = "Party",
+               names_pattern = "(.*)_seats",
+               values_to = "Mean")
+
+percentiles_votes <- reweighted_simulations %>%
   summarise_all(.funs = list(P05 = ~ quantile(x = ., probs = 0.05),
                              P25 = ~ quantile(x = ., probs = 0.25),
                              P50 = ~ quantile(x = ., probs = 0.50),
@@ -362,9 +370,9 @@ vote_simulation_summary <- percentiles_votes %>%
   geom_point(aes(x = P05, y = Party, color = Party), size = 4) +
   geom_point(aes(x = P50, y = Party, color = Party), size = 4) +
   geom_point(aes(x = P95, y = Party, color = Party), size = 4) +
-  geom_text(aes(x = P05, y = Party, color = Party, label = scales::label_percent(suffix = "")(P05)), nudge_x = -0.0175) +
-  geom_text(aes(x = P50, y = Party, color = Party, label = scales::label_percent(suffix = "")(P50)), nudge_y = 0.4) +
-  geom_text(aes(x = P95, y = Party, color = Party, label = scales::label_percent(suffix = "")(P95)), nudge_x = 0.0175) +
+  geom_text(aes(x = P05, y = Party, color = Party, label = scales::label_percent(suffix = "")(round(P05,3))), nudge_x = -0.0175) +
+  geom_text(aes(x = P50, y = Party, color = Party, label = scales::label_percent(suffix = "")(round(P50,3))), nudge_y = 0.4) +
+  geom_text(aes(x = P95, y = Party, color = Party, label = scales::label_percent(suffix = "")(round(P95,3))), nudge_x = 0.0175) +
   theme_minimal()  +
   scale_color_manual(values = c("PC" = "dodgerblue4",
                                 "Liberal" = "Red",
@@ -392,14 +400,15 @@ percentiles_seat_simulations <- riding_winners %>%
   pivot_wider(everything(), names_from = "Percentile")
 
 seat_simulation_summary <- percentiles_seat_simulations %>%
+  inner_join(mean_seats_simulations, on = "Party") %>%
   ggplot() +
-  geom_vline(xintercept = 63, colour="Black", size = 2) +
+  geom_vline(xintercept = 63, colour="Black", size = 2, alpha = 0.25) +
   geom_segment(aes(y = fct_reorder(Party, P50), x = P05, yend = Party, xend = P95, color = Party), size = 2) +
   geom_point(aes(x = P05, y = Party, color = Party), size = 4) +
   geom_text(aes(x = P05, y = Party, color = Party, label = round(P05)), nudge_x = -2.5) +
-  geom_text(aes(x = P50, y = Party, color = Party, label = round(P50)), nudge_y = 0.4) +
+  geom_text(aes(x = Mean, y = Party, color = Party, label = round(Mean)), nudge_y = 0.4) +
   geom_text(aes(x = P95, y = Party, color = Party, label = round(P95)), nudge_x = 2.5) +
-  geom_point(aes(x = P50, y = Party, color = Party), size = 4) +
+  geom_point(aes(x = Mean, y = Party, color = Party), size = 4) +
   geom_point(aes(x = P95, y = Party, color = Party), size = 4) +
   theme_minimal()  +
   scale_color_manual(values = c("PC" = "dodgerblue4",
@@ -412,10 +421,6 @@ seat_simulation_summary <- percentiles_seat_simulations %>%
   xlab("Number of seats") + ylab("Party") +
   theme(aspect.ratio = 0.2)
 ggsave("./figures/seat_simulation_summary.png", height=2.5, width=10)
-
-mean_seats_simulations <- riding_winners %>%
-  select(PC_seats, NDP_seats, Liberal_seats, Green_seats, Other_seats) %>%
-  summarise_all(mean)
 
 #rm(campaign_data, campaign_fit, campaign_mod, list_draws)
 #save(list = setdiff(ls(), c("campaign_data", "campaign_fit", "campaign_mod", "list_draws")), file = "saved_with_sigma.Rdata")
