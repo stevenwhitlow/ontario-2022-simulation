@@ -1,0 +1,617 @@
+---
+title: "Ontario Election Simulation"
+output:
+  flexdashboard::flex_dashboard:
+    fig_height: 9
+    fig_width: 8
+    fig_retina: 4
+    fig_mobile: !expr c(9, 16)
+    orientation: columns
+    theme: 
+      version: 4
+    #  bootswatch: simplex
+    self_contained: false
+---
+
+<style>                     
+.navbar {
+  background-color:#373a3c;
+}
+
+.value {
+  color: white;
+}
+
+.caption {
+  color: white;
+}
+
+</style>                    
+
+```{r, echo = FALSE}
+library(tidyverse)
+library(flexdashboard)
+library(leaflet)
+library(tibble)
+library(sf)
+library(DT)
+setwd("/Users/steven/Documents/elections/ontario/")
+load("saved_with_sigma.Rdata")
+district_region_list <- district_regions %>% select(districtid, regionid) %>% arrange(districtid)
+region_list <- district_regions %>% select(regionid, region) %>% distinct() %>% arrange(regionid)
+party_list_wide <- party_list %>% pivot_wider(names_from = party, values_from = partyid)
+boundaries <- st_read("./shapefiles/ELECTORAL_DISTRICT.shp", quiet = TRUE)
+```
+# Overview
+
+Column
+--------------
+
+### Overview {data-height=125}
+
+For riding-level estimates, hover over the map below. 
+
+Detailed information for each riding are available through the navigation bar above, organized by region.
+
+### Riding-by-riding map {data-height=1000}
+```{r}
+riding_percentages <- apply(riding_simulations, c(2,3), mean) %>%
+  as.data.frame() %>%
+  rename(PC = "V1",
+         NDP = "V2",
+         Liberal = "V3",
+         Green = "V4",
+         Other = "V5") %>%
+  rownames_to_column(var = "districtid") %>%
+  mutate(districtid = as.numeric(districtid)) %>%
+  inner_join(riding_id_list, on="districtid")
+
+boundaries <- boundaries %>%
+  sf::st_transform('+proj=longlat +datum=WGS84')
+
+map_df <- boundaries %>%
+  inner_join(riding_percentages, by=c("ED_ID"="districtid")) %>%
+  inner_join((riding_win_percentages %>% rownames_to_column(var = "Party") %>% pivot_longer(!Party, names_to = "district") %>% pivot_wider(names_from = Party) %>%
+                rename(PC_win = "1",NDP_win = "2",Liberal_win = "3",Green_win = "4",Other_win = "5")),
+             by=c("district" = "district")) %>%
+  mutate(projection = case_when(
+    PC_win > 0.95 ~ "Safe PC",
+    PC_win > 0.85 ~ "Likely PC",
+    PC_win > 0.65 ~ "Lean PC",
+    NDP_win > 0.95 ~ "Safe NDP",
+    NDP_win > 0.85 ~ "Likely NDP",
+    NDP_win > 0.65 ~ "Lean NDP",
+    Liberal_win > 0.95 ~ "Safe Liberal",
+    Liberal_win > 0.85 ~ "Likely Liberal",
+    Liberal_win > 0.65 ~ "Lean Liberal",
+    Green_win > 0.95 ~ "Safe Green",
+    Green_win > 0.85 ~ "Likely Green",
+    Green_win > 0.65 ~ "Lean Green",
+    TRUE ~ "Tossup"
+  ))
+
+map_df <- map_df %>%
+  inner_join(riding_results_2018_actual %>% select(districtid, PC, NDP, Liberal, Green, Other),
+             by = c("ED_ID"="districtid"),
+             suffix = c("", "_old")) %>%
+  mutate(PC_diff = PC - PC_old,
+         NDP_diff = NDP - NDP_old,
+         Liberal_diff = Liberal - Liberal_old,
+         Green_diff = Green - Green_old,
+         Other_diff = Other - Other_old) %>%
+  mutate(PC_sign = case_when(PC_diff > 0 ~ "▲",
+                             PC_diff == 0 ~ "→",
+                             PC_diff < 0 ~ "▼"),
+         NDP_sign = case_when(NDP_diff > 0 ~ "▲",
+                             NDP_diff == 0 ~ "→",
+                             NDP_diff < 0 ~ "▼"),
+         Liberal_sign = case_when(Liberal_diff > 0 ~ "▲",
+                             Liberal_diff == 0 ~ "→",
+                             Liberal_diff < 0 ~ "▼"),
+         Green_sign = case_when(Green_diff > 0 ~ "▲",
+                             Green_diff == 0 ~ "→",
+                             Green_diff < 0 ~ "▼"),
+         Other_sign = case_when(Other_diff > 0 ~ "▲",
+                             Other_diff == 0 ~ "→",
+                             Other_diff < 0 ~ "▼")
+         )
+
+colours_map <- colorFactor(c("lightgreen", "red", "orange", "#1E90FF",
+                             "green", "red3", "darkorange", "dodgerblue3",
+                             "forestgreen", "red4", "darkorange3", "dodgerblue4",
+                             "grey"), 
+                           c("Lean Green", "Lean Liberal", "Lean NDP", "Lean PC",
+                             "Likely Green", "Likely Liberal", "Likely NDP", "Likely PC",
+                             "Safe Green", "Safe Liberal", "Safe NDP", "Safe PC",
+                             "Tossup"))
+
+
+map_labels <- sprintf(
+  "<strong>%s</strong><br/>
+  <strong><i>%s</strong></i><br/>
+  Estimated results: </br>
+  PC: %s (%s%s)<br/>
+  NDP: %s (%s%s)<br/>
+  Liberal: %s (%s%s)<br/>
+  Green: %s (%s%s)<br/>
+  Other: %s (%s%s)<br/>",
+  map_df$district,
+  map_df$projection,
+  scales::label_percent(accuracy = 0.1L)(map_df$PC),
+  map_df$PC_sign,
+  scales::label_percent(accuracy = 0.1L)(abs(map_df$PC_diff)),
+  scales::label_percent(accuracy = 0.1L)(map_df$NDP),
+  map_df$NDP_sign,
+  scales::label_percent(accuracy = 0.1L)(abs(map_df$NDP_diff)),
+  scales::label_percent(accuracy = 0.1L)(map_df$Liberal),
+  map_df$Liberal_sign,
+  scales::label_percent(accuracy = 0.1L)(abs(map_df$Liberal_diff)),
+  scales::label_percent(accuracy = 0.1L)(map_df$Green),
+  map_df$Green_sign,
+  scales::label_percent(accuracy = 0.1L)(abs(map_df$Green_diff)),
+  scales::label_percent(accuracy = 0.1L)(map_df$Other),
+  map_df$Other_sign,
+  scales::label_percent(accuracy = 0.1L)(abs(map_df$Other_diff))
+) %>% lapply(htmltools::HTML)
+
+leaflet(map_df) %>%
+  addPolygons(smoothFactor = 0.75, color = "Black", weight = 1.5, fillOpacity = 1,
+              fillColor = ~colours_map(projection),
+              label = map_labels,
+              labelOptions = labelOptions(
+                style = list("font-weight" = "normal", padding = "3px 8px"),
+                textsize = "12px",
+                direction = "auto"))
+```
+
+Column {.tabset}
+--------------
+
+### Provincial summary
+
+```{r}
+ ggpubr::ggarrange(vote_simulation_summary + ggtitle("Summary of popular vote estimates") + theme(aspect.ratio = 0.3) +
+                    labs(caption = "Results across 5000 simulations") +
+                    theme(plot.caption = element_text(hjust = 0)),
+                  seat_simulation_summary + ggtitle("Summary of seat count estimates")  + theme(aspect.ratio = 0.3) +
+                    labs(caption = "Results across 5000 simulations") +
+                    theme(plot.caption = element_text(hjust = 0)),
+                  election_changes + ggtitle("Vote intention over time") + theme(aspect.ratio = 0.3),
+                  nrow = 3, ncol =1)
+```
+
+### Distribution of outcomes
+
+```{r}
+ggpubr::ggarrange(vote_simulation_detailed + ggtitle("Estimates of provincial popular vote") +
+                    labs(caption = "Results across 5000 simulations") +
+                    theme(plot.caption = element_text(hjust = 0)),
+                  seat_simulation_detailed + ggtitle("Estimates of total seat count") +
+                    labs(caption = "Results across 5000 simulations") +
+                    theme(plot.caption = element_text(hjust = 0)),
+                  nrow = 2, ncol = 1)
+```
+
+### Scenarios
+
+```{r}
+lead_figures_df <- simulations %>% as.data.frame() %>%
+  rownames_to_column(var = "simulation") %>%
+  inner_join(riding_winners %>%
+               select(PC_seats, NDP_seats, Liberal_seats, Green_seats, Other_seats) %>%
+               rownames_to_column(var = "simulation"),
+             on = ("simulation")) %>%
+  mutate(pc_majority = if_else(PC_seats >= 63, 1 ,0),
+         pc_lead = PC - Liberal,
+         lib_second = if_else(Liberal_seats > NDP_seats, 1, 0),
+         lib_lead = Liberal - NDP)
+
+pc_majority <- lead_figures_df %>%
+  ggplot(aes(x = PC, y = pc_majority)) +
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), color = "dodgerblue4", fill = alpha("dodgerblue4", 0.5)) +
+  scale_x_continuous(labels = scales::label_percent(scale=100)) +
+  scale_y_continuous(labels = scales::label_percent(scale=100)) +
+  xlab("PC share of vote") + ylab("Probability of PC majority") +
+  theme_minimal()
+
+lib_second <- lead_figures_df %>%
+  ggplot(aes(x = Liberal, y = lib_second)) +
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), color = "red", fill = alpha("red", 0.5)) +
+  scale_x_continuous(labels = scales::label_percent(scale=100)) +
+  scale_y_continuous(labels = scales::label_percent(scale=100)) +
+  xlab("Liberal share of vote") + ylab("Probability of Liberals second") +
+  theme_minimal()
+
+ggpubr::ggarrange(pc_majority + ggtitle("Likelihood of PC majority", subtitle = "as a function of PC share of vote"),
+                  lib_second + ggtitle("Likelihood of Liberals finishing second in seats", subtitle = "as a function of Liberal share of vote"),
+                  nrow = 2, ncol = 1)
+```
+
+### Riding-by-riding win probabilities
+
+```{r}
+(riding_win_percentages %>% rownames_to_column(var = "Party") %>% pivot_longer(!Party, names_to = "district") %>% pivot_wider(names_from = Party) %>%
+  rename(PC_win = "1",NDP_win = "2",Liberal_win = "3",Green_win = "4",Other_win = "5")) %>%
+  datatable(caption = htmltools::tags$caption(
+            style = 'caption-side: top; text-align: left;',
+            'Probability to win each riding:', htmltools::em('Full details for each riding available through the navigation menu.')
+            ),
+            options = list(pageLength = 20),
+            colnames = c("Riding", "PC", "NDP", "Liberal", "Green", "Other")) %>%
+  formatPercentage(c("PC_win", "NDP_win", "Liberal_win", "Green_win", "Other_win"), 1)
+```
+
+```{r,echo = FALSE, eval = TRUE}
+
+projection_box <- function(riding_projection){
+  win_probability <- riding_projection %>%
+  as.data.frame() %>%
+  rename(PC = "V1",
+         NDP = "V2",
+         Liberal = "V3",
+         Green = "V4",
+         Other = "V5") %>%
+  mutate(across(everything(), .fns = ~replace_na(.,0))) %>%
+  mutate(winner_party = case_when(
+    PC == pmax(PC, NDP, Liberal, Green, Other) ~ "PC",
+    NDP == pmax(PC, NDP, Liberal, Green, Other) ~ "NDP",
+    Liberal == pmax(PC, NDP, Liberal, Green, Other) ~ "Liberal",
+    Green == pmax(PC, NDP, Liberal, Green, Other) ~ "Green",
+    Other == pmax(PC, NDP, Liberal, Green, Other) ~ "Other"
+  )) %>% group_by(winner_party) %>% tally() %>% mutate(n = n/5000) %>%
+    full_join(party_list %>% select(party), by = c("winner_party" = "party")) %>%
+    replace(is.na(.), 0) %>%
+    pivot_wider(names_from = winner_party, values_from = n)
+valueBox(
+  case_when(
+    win_probability$PC > 0.95 ~ "Safe PC",
+    win_probability$PC > 0.85 ~ "Likely PC",
+    win_probability$PC > 0.65 ~ "Lean PC",
+    win_probability$NDP > 0.95 ~ "Safe NDP",
+    win_probability$NDP > 0.85 ~ "Likely NDP",
+    win_probability$NDP > 0.65 ~ "Lean NDP",
+    win_probability$Liberal > 0.95 ~ "Safe Liberal",
+    win_probability$Liberal > 0.85 ~ "Likely Liberal",
+    win_probability$Liberal > 0.65 ~ "Lean Liberal",
+    win_probability$Green > 0.95 ~ "Safe Green",
+    win_probability$Green > 0.85 ~ "Likely Green",
+    win_probability$Green > 0.65 ~ "Lean Green",
+    TRUE ~ "Tossup"
+  ), icon = ifelse("fa-circle-check"),
+   color = case_when(
+     win_probability$PC > 0.95 ~ "#104e8b",
+     win_probability$PC > 0.85 ~ "#1874cd",
+     win_probability$PC > 0.65 ~ "#1E90FF",
+     win_probability$NDP > 0.95 ~ "#ee7600",
+     win_probability$NDP > 0.85 ~ "#ff8c00",
+     win_probability$NDP > 0.65 ~ "orange",
+     win_probability$Liberal > 0.95 ~ "#8b0000",
+     win_probability$Liberal > 0.85 ~ "#cd0000",
+     win_probability$Liberal > 0.65 ~ "red",
+     win_probability$Green > 0.95 ~ "forestgreen",
+     win_probability$Green > 0.85 ~ "green",
+     win_probability$Green > 0.65 ~ "90ee90",
+     TRUE ~ "grey"
+   )
+)}
+
+win_percentage_table <- function(riding_projection){
+riding_projection %>%
+  as.data.frame() %>%
+  rename(PC = "V1",
+         NDP = "V2",
+         Liberal = "V3",
+         Green = "V4",
+         Other = "V5") %>%
+  mutate(across(everything(), .fns = ~replace_na(.,0))) %>%
+  mutate(winner_party = case_when(
+    PC == pmax(PC, NDP, Liberal, Green, Other) ~ "PC",
+    NDP == pmax(PC, NDP, Liberal, Green, Other) ~ "NDP",
+    Liberal == pmax(PC, NDP, Liberal, Green, Other) ~ "Liberal",
+    Green == pmax(PC, NDP, Liberal, Green, Other) ~ "Green",
+    Other == pmax(PC, NDP, Liberal, Green, Other) ~ "Other"
+  )) %>% group_by(winner_party) %>% tally() %>% mutate(n = n/5000) %>%
+  arrange(desc(n)) %>%
+  mutate(n = scales::label_percent(accuracy = 0.1L)(n)) %>%
+  knitr::kable(, col.names = c("Party", "Probability of winning"))
+}
+
+vote_percentage_table <- function(riding_projection){
+  riding_projection %>%
+  as.data.frame() %>%
+  rename(PC = "V1",
+         NDP = "V2",
+         Liberal = "V3",
+         Green = "V4",
+         Other = "V5") %>%
+  mutate(across(everything(), .fns = ~replace_na(.,0))) %>%
+  summarise_all(mean) %>%
+  pivot_longer(everything(), names_to = "Party", values_to = "Percent") %>%
+  arrange(desc(Percent)) %>%
+  mutate(Percent = scales::label_percent(accuracy = 0.1L)(Percent)) %>%
+  knitr::kable(, col.names = c("Party", "Popular vote"))
+}
+
+density_graph <- function(riding_projection){
+  riding_projection %>%
+  as.data.frame() %>%
+  rename(PC = "V1",
+         NDP = "V2",
+         Liberal = "V3",
+         Green = "V4",
+         Other = "V5") %>%
+  ggplot() +
+  geom_density(aes(x=PC), color = "Blue", fill = "Blue", alpha=0.5) +
+  geom_density(aes(x=Liberal), color = "Red", fill = "Red",alpha=0.5) +
+  geom_density(aes(x=NDP), color = "Orange", fill = "Orange",alpha=0.5) +
+  geom_density(aes(x=Other),color = "darkgrey", fill = "darkgrey", alpha=0.5) +
+  geom_density(aes(x=Green),color = "Green", fill = "Green",alpha=0.5) +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::percent) +
+  scale_y_continuous(labels = scales::label_percent(scale=1/50), expand = expansion(mult = c(0, 0))) +
+  xlab("Voting intention (%)") + ylab("Density") +
+  geom_hline(yintercept=0, colour="lightgrey", size=0.5) -> plot
+  return(plot)
+}
+
+# Define Column
+new_column <- "Row\n-------------------------------------"
+
+
+document_string <- ""
+plotly_list <- list()
+
+for (i in 1:(region_results_2018 %>%
+             tally() %>%
+             .[[1]])) 
+  {
+  loop_region_name <-  region_list %>% .$region %>% .[i]
+  for (j in 1:(district_regions %>%
+               filter(regionid == i) %>%
+               tally() %>%
+               .[[1]]))
+    {
+      loop_district_name <- district_regions %>%
+        filter(regionid == i) %>%
+          .$district %>% .[j]
+      
+      loop_district_id <- district_regions %>%
+        filter(regionid == i) %>%
+          .$districtid %>% .[j]
+      
+      loop_share_projection <- riding_simulations[,riding_id_list %>% filter(districtid == loop_district_id) %>% .[[1,2]],]
+      
+      # Header/navbar item
+      loop_header <- paste0("# ", loop_district_name, " {data-navmenu=\"", loop_region_name, "\"}\n")
+      
+      # Riding name
+      district_box_loop <- knitr::knit_expand(text = valueBox(loop_district_name, color = "#373a3c"))
+      loop_ridingname <- paste0("### Riding\n\n",
+                                district_box_loop, "\n")
+      #loop_ridingname <- paste0("### Riding\n",
+       #                         "\\valueBox(\"", loop_district_name, "\", color = \"#2780e3\")\n")
+      
+      # Projection in words
+      projection_box_loop <- knitr::knit_expand(text = projection_box(loop_share_projection))
+      loop_projection <- paste0("### Projection\n", projection_box_loop, "\n")
+      
+      # Prob of winning
+      win_percentage_table_loop <- knitr::knit_expand(text = win_percentage_table(loop_share_projection))
+      loop_probability <- paste0("### Chances of winning in ", loop_district_name, "\n",
+                                 win_percentage_table_loop, "\n")
+
+      # Vote percent
+      vote_percentage_table_loop <- knitr::knit_expand(text = vote_percentage_table(loop_share_projection))
+      loop_percentage <- paste0("### Best estimate of results in ", loop_district_name, "\n",
+                                 vote_percentage_table_loop, "\n")
+      
+      #Density estimates
+      density_ggplot <- density_graph(loop_share_projection)
+      ggplot_path <- paste0("./dashboard_figures/", i, "_", j, ".png")
+      ggsave(ggplot_path, density_ggplot, dpi = "screen")
+      plotly_list[[loop_district_id]] <- density_ggplot
+      loop_density <- knitr::knit_expand(text = paste0("### Simulation outcomes in ", loop_district_name,
+                            "\n ![Simulation outcomes](", ggplot_path, ")\n"))
+      #loop_density <- knitr::knit_expand(text = paste0("### Simulation outcomes in ", loop_district_name,
+       #                      "\n {{plotly_list[[",loop_district_id,"]]}}\n"))
+
+
+      document_string <- paste(document_string,
+                               loop_header,
+                               new_column,
+                               loop_ridingname,
+                               loop_projection,
+                               loop_probability,
+                               new_column,
+                               loop_percentage,
+                               loop_density,
+                               sep = "\n")
+      #a1 <- knitr::knit_expand(text = sprintf("# %s\n", names(hcs)[i])) # Page name and navigation
+# Milton {data-navmenu="902"}
+
+  }
+}
+
+```
+`r paste(knitr::knit(text = paste(knitr::knit_expand(text = document_string), collapse = '\n')))`
+
+
+<!-- # Milton {data-navmenu="902"} -->
+
+<!-- Row -->
+<!-- ------------------------------------- -->
+
+<!-- ### Simulation outcomes in Milton -->
+<!-- ```{r} -->
+<!-- riding_simulations[,1,] %>% -->
+<!--   as.data.frame() %>% -->
+<!--   rename(PC = "1", -->
+<!--          NDP = "2", -->
+<!--          Liberal = "3", -->
+<!--          Green = "4", -->
+<!--          Other = "5") %>% -->
+<!--   summarise_all(.funs = list(P05 = ~ quantile(x = ., probs = 0.05), -->
+<!--                              P25 = ~ quantile(x = ., probs = 0.25), -->
+<!--                              P50 = ~ quantile(x = ., probs = 0.50), -->
+<!--                              P75 = ~ quantile(x = ., probs = 0.75), -->
+<!--                              P95 = ~ quantile(x = ., probs = 0.95) -->
+<!--   ) -->
+<!--   ) %>% -->
+<!--   pivot_longer(everything(), names_to = c("Party", "Percentile"), names_sep = "_") %>% -->
+<!--   pivot_wider(everything(), names_from = "Percentile") %>% -->
+<!--   ggplot() + -->
+<!--   geom_segment(aes(y = fct_reorder(Party, P50), x = P05, yend = Party, xend = P95, color = Party), size = 2) + -->
+<!--   geom_point(aes(x = P05, y = Party, color = Party), size = 4) + -->
+<!--   geom_point(aes(x = P50, y = Party, color = Party), size = 4) + -->
+<!--   geom_point(aes(x = P95, y = Party, color = Party), size = 4) + -->
+<!--   geom_text(aes(x = P05, y = Party, color = Party, label = scales::label_percent()(P05)), nudge_y = 0.3) + -->
+<!--   geom_text(aes(x = P50, y = Party, color = Party, label = scales::label_percent()(P50)), nudge_y = 0.3) + -->
+<!--   geom_text(aes(x = P95, y = Party, color = Party, label = scales::label_percent()(P95)), nudge_y = 0.3) + -->
+<!--   theme_minimal()  + -->
+<!--   scale_color_manual(values = c("PC" = "blue", -->
+<!--                                 "Liberal" = "red", -->
+<!--                                 "NDP" = "orange", -->
+<!--                                 "Green" = "darkgreen", -->
+<!--                                 "Other" = "darkgrey" -->
+<!--   ) -->
+<!--   )  +  -->
+<!--   scale_x_continuous(labels = scales::label_percent(scale=100)) + -->
+<!--   xlab("Percent of vote") + ylab("Party") -> plottly -->
+<!-- ggplotly(plottly) -->
+<!-- ``` -->
+
+<!-- Row -->
+<!-- ------------------------------------- -->
+
+<!-- ### Riding -->
+<!-- ```{r} -->
+<!-- valueBox( -->
+<!-- 'Milton', -->
+<!--   color = "#2780e3" -->
+<!-- ) -->
+<!-- ``` -->
+
+<!-- ### Projection -->
+<!-- ```{r} -->
+<!-- projection_box <- function(riding_projection){ -->
+<!--   win_probability <- riding_projection %>% -->
+<!--   as.data.frame() %>% -->
+<!--   rename(PC = "1", -->
+<!--          NDP = "2", -->
+<!--          Liberal = "3", -->
+<!--          Green = "4", -->
+<!--          Other = "5") %>% -->
+<!--   mutate(across(everything(), .fns = ~replace_na(.,0))) %>% -->
+<!--   mutate(winner_party = case_when( -->
+<!--     PC == pmax(PC, NDP, Liberal, Green, Other) ~ "PC", -->
+<!--     NDP == pmax(PC, NDP, Liberal, Green, Other) ~ "NDP", -->
+<!--     Liberal == pmax(PC, NDP, Liberal, Green, Other) ~ "Liberal", -->
+<!--     Green == pmax(PC, NDP, Liberal, Green, Other) ~ "Green", -->
+<!--     Other == pmax(PC, NDP, Liberal, Green, Other) ~ "Other" -->
+<!--   )) %>% group_by(winner_party) %>% tally() %>% mutate(n = n/5000) %>% -->
+<!--     full_join(party_list %>% select(party), by = c("winner_party" = "party")) %>% -->
+<!--     replace(is.na(.), 0) %>% -->
+<!--     pivot_wider(names_from = winner_party, values_from = n) -->
+<!-- valueBox( -->
+<!--   case_when( -->
+<!--     win_probability$PC > 0.80 ~ "Safe PC", -->
+<!--     win_probability$PC > 0.60 ~ "Lean PC", -->
+<!--     win_probability$NDP > 0.80 ~ "Safe NDP", -->
+<!--     win_probability$NDP > 0.60 ~ "Lean NDP", -->
+<!--     win_probability$Liberal > 0.80 ~ "Safe Liberal", -->
+<!--     win_probability$Liberal > 0.60 ~ "Lean Liberal", -->
+<!--     win_probability$Green > 0.80 ~ "Safe Green", -->
+<!--     win_probability$Green > 0.60 ~ "Lean Green", -->
+<!--     TRUE ~ "Tossup" -->
+<!--   ), icon = ifelse("fa-circle-check"), -->
+<!--    color = case_when( -->
+<!--      win_probability$PC > 0.80 ~ "blue", -->
+<!--      win_probability$PC > 0.60 ~ "#1E90FF", -->
+<!--      win_probability$NDP > 0.80 ~ "orange", -->
+<!--      win_probability$NDP > 0.60 ~ "lightorange", -->
+<!--      win_probability$Liberal > 0.80 ~ "red", -->
+<!--      win_probability$Liberal > 0.60 ~ "lightred", -->
+<!--      win_probability$Green > 0.80 ~ "green", -->
+<!--      win_probability$Green > 0.60 ~ "lightgreen", -->
+<!--      TRUE ~ "White" -->
+<!--    ) -->
+<!-- )} -->
+<!-- projection_box(riding_simulations[,riding_id_list %>% filter(str_detect(district,"York South")) %>% .[[1,1]],]) -->
+
+<!-- ``` -->
+
+<!-- ### Probability of winning Milton -->
+
+<!-- ```{r} -->
+<!-- riding_simulations[,riding_id_list %>% filter(str_detect(district,"York South")) %>% .[[1,1]],] %>% -->
+<!--   as.data.frame() %>% -->
+<!--   rename(PC = "1", -->
+<!--          NDP = "2", -->
+<!--          Liberal = "3", -->
+<!--          Green = "4", -->
+<!--          Other = "5") %>% -->
+<!--   mutate(across(everything(), .fns = ~replace_na(.,0))) %>% -->
+<!--   mutate(winner_party = case_when( -->
+<!--     PC == pmax(PC, NDP, Liberal, Green, Other) ~ "PC", -->
+<!--     NDP == pmax(PC, NDP, Liberal, Green, Other) ~ "NDP", -->
+<!--     Liberal == pmax(PC, NDP, Liberal, Green, Other) ~ "Liberal", -->
+<!--     Green == pmax(PC, NDP, Liberal, Green, Other) ~ "Green", -->
+<!--     Other == pmax(PC, NDP, Liberal, Green, Other) ~ "Other" -->
+<!--   )) %>% group_by(winner_party) %>% tally() %>% mutate(n = n/5000) %>% -->
+<!--   arrange(desc(n)) %>% -->
+<!--   mutate(n = scales::label_percent(accuracy = 0.1L)(n)) %>% -->
+<!--   knitr::kable(, col.names = c("Party", "Probability of winning")) -->
+<!-- ``` -->
+
+<!-- Row -->
+<!-- ------------------------------------- -->
+
+<!-- ### Best estimate of results in Milton -->
+
+<!-- ```{r} -->
+<!-- riding_simulations[,riding_id_list %>% filter(str_detect(district,"York South")) %>% .[[1,1]],] %>% -->
+<!--   as.data.frame() %>% -->
+<!--   rename(PC = "1", -->
+<!--          NDP = "2", -->
+<!--          Liberal = "3", -->
+<!--          Green = "4", -->
+<!--          Other = "5") %>% -->
+<!--   mutate(across(everything(), .fns = ~replace_na(.,0))) %>% -->
+<!--   summarise_all(mean) %>% -->
+<!--   pivot_longer(everything(), names_to = "Party", values_to = "Percent") %>% -->
+<!--   arrange(desc(Percent)) %>% -->
+<!--   mutate(Percent = scales::label_percent(accuracy = 0.1L)(Percent)) %>% -->
+<!--   knitr::kable(, col.names = c("Party", "Popular vote")) -->
+<!-- ``` -->
+
+<!-- ### Simulation outcomes in Milton -->
+
+<!-- ```{r} -->
+<!-- riding_simulations[,riding_id_list %>% filter(str_detect(district,"York South")) %>% .[[1,1]],] %>% -->
+<!--   as.data.frame() %>% -->
+<!--   rename(PC = "1", -->
+<!--          NDP = "2", -->
+<!--          Liberal = "3", -->
+<!--          Green = "4", -->
+<!--          Other = "5") %>% -->
+<!--   ggplot() + -->
+<!--   # geom_histogram(aes(x=PC), color = "Blue", fill = "Blue", alpha=0.5, binwidth = .01) + -->
+<!--   # geom_histogram(aes(x=Liberal), color = "Red", fill = "Red",alpha=0.5, binwidth = .01) + -->
+<!--   # geom_histogram(aes(x=NDP), color = "Orange", fill = "Orange",alpha=0.5, binwidth = .01) + -->
+<!--   # geom_histogram(aes(x=Other),color = "darkgrey", fill = "darkgrey", alpha=0.5, binwidth = .01) + -->
+<!--   # geom_histogram(aes(x=Green),color = "Green", fill = "Green",alpha=0.5, binwidth = .01) + -->
+<!--   geom_density(aes(x=PC), color = "Blue", fill = "Blue", alpha=0.5) + -->
+<!--   geom_density(aes(x=Liberal), color = "Red", fill = "Red",alpha=0.5) + -->
+<!--   geom_density(aes(x=NDP), color = "Orange", fill = "Orange",alpha=0.5) + -->
+<!--   geom_density(aes(x=Other),color = "darkgrey", fill = "darkgrey", alpha=0.5) + -->
+<!--   geom_density(aes(x=Green),color = "Green", fill = "Green",alpha=0.5) + -->
+<!--   theme_minimal() + -->
+<!--   scale_x_continuous(labels = scales::percent) + -->
+<!--   scale_y_continuous(labels = scales::label_percent(scale=1/50), expand = expansion(mult = c(0, 0))) + -->
+<!--   xlab("Voting intention (%)") + ylab("Density") + -->
+<!--   geom_hline(yintercept=0, colour="lightgrey", size=0.5) -> plott -->
+<!--   ggplotly(plott) -->
+<!-- ``` -->
+
+
+
