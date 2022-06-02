@@ -170,17 +170,17 @@ ggplot() +
 ggsave("./figures/other_election.png")
 
 election_changes <- ggplot() +
-  geom_ribbon(data = xi %>% filter(partyid==1 & Date >= ymd(20220501)), mapping = aes(x = Date, ymin = summary.2.5., ymax = summary.97.5.), alpha = 0.2, fill = "Blue") +
+  geom_ribbon(data = xi %>% filter(partyid==1 & Date >= ymd(20220501)), mapping = aes(x = Date, ymin = summary.2.5., ymax = summary.97.5.), alpha = 0.2, fill = "dodgerblue4") +
   geom_point(data = polling %>% filter(Date >= ymd(20220501)),
              mapping = aes(x = Date, y = PC), alpha = 0.2, colour = "dodgerblue4") +
-  geom_line(data = xi %>% filter(partyid==1 & Date >= ymd(20220501)), mapping = aes(x = Date, y = summary.mean), size = 1.5, color = "Blue") +
-  geom_ribbon(data = xi %>% filter(partyid==2 & Date >= ymd(20220501)), mapping = aes(x = Date, ymin = summary.2.5., ymax = summary.97.5.), alpha = 0.2, fill = "Orange") +
+  geom_line(data = xi %>% filter(partyid==1 & Date >= ymd(20220501)), mapping = aes(x = Date, y = summary.mean), size = 1.5, color = "dodgerblue4") +
+  geom_ribbon(data = xi %>% filter(partyid==2 & Date >= ymd(20220501)), mapping = aes(x = Date, ymin = summary.2.5., ymax = summary.97.5.), alpha = 0.2, fill = "darkorange2") +
   geom_point(data = polling %>% filter(Date >= ymd(20220501)),
              mapping = aes(x = Date, y = NDP), alpha = 0.2, colour = "darkorange2") +
-  geom_line(data = xi %>% filter(partyid==2 & Date >= ymd(20220501)), mapping = aes(x = Date, y = summary.mean), size = 1.5, color = "Orange") +
+  geom_line(data = xi %>% filter(partyid==2 & Date >= ymd(20220501)), mapping = aes(x = Date, y = summary.mean), size = 1.5, color = "darkorange2") +
   geom_ribbon(data = xi %>% filter(partyid==3 & Date >= ymd(20220501)), mapping = aes(x = Date, ymin = summary.2.5., ymax = summary.97.5.), alpha = 0.2, fill = "Red") +
   geom_point(data = polling %>% filter(Date >= ymd(20220501)),
-             mapping = aes(x = Date, y = Liberal), alpha = 0.2, colour = "Red4") +
+             mapping = aes(x = Date, y = Liberal), alpha = 0.2, colour = "Red") +
   geom_line(data = xi %>% filter(partyid==3 & Date >= ymd(20220501)), mapping = aes(x = Date, y = summary.mean), size = 1.5, color = "Red") +
   theme(legend.position="bottom") +
   scale_y_continuous(labels = scales::percent) +
