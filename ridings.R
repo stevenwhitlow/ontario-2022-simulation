@@ -80,11 +80,16 @@ riding_results_2018_wide <- riding_results_2018_wide %>%
          Green = if_else(is.na(Other), 0.99*Green, Green)
          ) %>%
   mutate(Other = if_else(is.na(Other), 0.01, Other)) %>%
-  mutate(NDP = if_else(district == "Parry Sound—Muskoka"|district == "Timmins", NDP + (NDP*Liberal)/(1-Liberal-PC), NDP),
-         Green = if_else(district == "Parry Sound—Muskoka"|district == "Timmins", Green + (Green*Liberal)/(1-Liberal-PC), Green),
-         Other = if_else(district == "Parry Sound—Muskoka"|district == "Timmins", Other + (Other*Liberal)/(1-Liberal-PC), Other)
+  mutate(NDP = if_else(district == "Parry Sound—Muskoka", NDP + (NDP*Liberal)/(1-Liberal-PC), NDP),
+         Green = if_else(district == "Parry Sound—Muskoka", Green + (Green*Liberal)/(1-Liberal-PC), Green),
+         Other = if_else(district == "Parry Sound—Muskoka", Other + (Other*Liberal)/(1-Liberal-PC), Other)
          ) %>%
-  mutate(Liberal = if_else(district == "Parry Sound—Muskoka"|district == "Timmins", 0, Liberal)) %>%
+  mutate(PC = if_else(district == "Timmins"|district=="Chatham-Kent—Leamington", PC + (PC*Liberal)/(1-Liberal), PC),
+         NDP = if_else(district == "Timmins"|district=="Chatham-Kent—Leamington", NDP + (NDP*Liberal)/(1-Liberal), NDP),
+         Green = if_else(district == "Timmins"|district=="Chatham-Kent—Leamington", Green + (Green*Liberal)/(1-Liberal), Green),
+         Other = if_else(district == "Timmins"|district=="Chatham-Kent—Leamington", Other + (Other*Liberal)/(1-Liberal), Other)
+  ) %>%
+  mutate(Liberal = if_else(district == "Parry Sound—Muskoka"|district == "Timmins"|district=="Chatham-Kent—Leamington", 0, Liberal)) %>%
   mutate(Other = if_else(district == "Cambridge"|district == "Kitchener—Conestoga", Other + PC/15, Other)) %>%
   mutate(PC = if_else(district == "Cambridge"|district == "Kitchener—Conestoga", PC*(14/15), PC))
 

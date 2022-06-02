@@ -81,11 +81,11 @@ campaign_data <- within(list(), {
   zeta_scale <- 5
 })
 
-campaign_mod <- stan_model("campaign_with_sigma.stan")
+campaign_mod <- stan_model("campaign_nosigma.stan")
 
 campaign_fit <- sampling(campaign_mod, data = campaign_data,
                          iter = 5000,
                          chains = 4
 )
 
-saveRDS(campaign_fit, file = "campaign_fit_sigma.RDS")
+saveRDS(campaign_fit, file = "campaign_fit.RDS")

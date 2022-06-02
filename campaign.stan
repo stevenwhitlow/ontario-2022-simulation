@@ -33,8 +33,9 @@ parameters {
   matrix[num_parties, num_firms] delta_raw;
   //Scale parameter for house effects:
   real<lower = 0.> zeta;
-}
 
+  real<lower = 0> sigma[num_firms]; // scale for firm-specific errors
+}
 transformed parameters {
 
   //simplex[num_parties] xi[num_days];
@@ -79,6 +80,7 @@ model {
 
   // scale of innovations
   tau ~ normal(0, tau_scale);
+  sigma ~ normal(1, 0.5);
 
   // daily polls
   for (i in 1:(num_parties)) {
@@ -87,7 +89,7 @@ model {
    if (se[i,j] == 0) {
      print("Party: ", i, "Poll: ", j)
    }
-    y[i,j] ~ normal(mu[i,j], se[i,j]);
+    y[i,j] ~ normal(mu[i,j], sigma[house[j]]*se[i,j]);
   }
   }
 }

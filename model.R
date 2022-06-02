@@ -88,4 +88,4 @@ campaign_fit <- sampling(campaign_mod, data = campaign_data,
                          chains = 4
 )
 
-saveRDS(campaign_fit, file = "campaign_fit.RDS")
+saveRDS(campaign_fit, file = "campaign_fit_sigma.RDS")
