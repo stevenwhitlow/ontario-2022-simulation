@@ -35,11 +35,13 @@ clean_table <- function(df) {
     select(Firm, Date, PC, NDP, Liberal, Green, Other, N)
 }
 
-polling_election <- polling_ontario[[9]] %>%
-  clean_table()
+polling_election <- polling_ontario[[8]] 
+colnames(polling_election) <- polling_election[1,]
+polling_election %<>% clean_table()
 
-polling_preelection <- polling_ontario[[10]] %>%
-  clean_table()
+polling_preelection <- polling_ontario[[9]] 
+colnames(polling_preelection) <- polling_preelection[1,]
+polling_preelection %<>% clean_table()
 
 polling <- bind_rows(polling_election, polling_preelection)
 
